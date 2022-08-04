@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -48,7 +50,20 @@ func postAlbums(c *gin.Context) {
 	}
 
 	// Add the new album to the slice.
-	albums = append(albums, newAlbum)
+	// albums = append(albums, newAlbum)
+
+	lastInsertId := int64(0)
+	db := c.MustGet("db").(*sql.DB)
+	err := db.QueryRow("INSERT into album (title, artist, price) VALUES ($1, $2, $3) RETURNING id",
+		newAlbum.Title, newAlbum.Artist, newAlbum.Price).Scan(&lastInsertId)
+
+	if err != nil {
+		log.Fatalf("An error occurred while executing query: %v", err)
+	}
+
+	newAlbum.ID = lastInsertId
+
+	c.Header("Location", fmt.Sprintf("/albums/%d", lastInsertId))
 	c.IndentedJSON(http.StatusCreated, newAlbum)
 }
 
@@ -119,7 +134,7 @@ func CheckError(err error) {
 func main() {
 	var psqlconn = os.Getenv("DATABASE_URL")
 	if psqlconn == "" {
-		psqlconn = "postgres://user:pasword@localhost:5432/go_tips?sslmode=disable"
+		psqlconn = "postgres://user:password@localhost:5432/go_tips?sslmode=disable"
 	}
 
 	println("psqlconn = ", psqlconn)
@@ -139,5 +154,6 @@ func main() {
 	r.GET("/albums", getAlbums)
 	r.GET("/albums/:id", getAlbumByID)
 	r.POST("/albums", postAlbums)
+
 	r.Run() // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
 }
