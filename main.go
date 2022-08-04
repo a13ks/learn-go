@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"net/http"
+	"os"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -23,10 +24,6 @@ var albums = []album{
 	{ID: 2, Title: "Jeru", Artist: "Gerry Mulligan", Price: 17.99},
 	{ID: 3, Title: "Sarah Vaughan and Clifford Brown", Artist: "Sarah Vaughan", Price: 39.99},
 }
-
-const (
-	psqlconn = "postgres://user:password@localhost:5432/go_tips?sslmode=disable"
-)
 
 func Database(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -120,6 +117,12 @@ func CheckError(err error) {
 }
 
 func main() {
+	var psqlconn = os.Getenv("DATABASE_URL")
+	if psqlconn == "" {
+		psqlconn = "postgres://user:pasword@localhost:5432/go_tips?sslmode=disable"
+	}
+
+	println("psqlconn = ", psqlconn)
 	db, err := sql.Open("postgres", psqlconn)
 
 	if err != nil {
