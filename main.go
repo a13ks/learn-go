@@ -20,13 +20,6 @@ type album struct {
 	Price  float64 `json:"price"`
 }
 
-// albums slice to seed record album data.
-var albums = []album{
-	{ID: 1, Title: "Blue Train", Artist: "John Coltrane", Price: 56.99},
-	{ID: 2, Title: "Jeru", Artist: "Gerry Mulligan", Price: 17.99},
-	{ID: 3, Title: "Sarah Vaughan and Clifford Brown", Artist: "Sarah Vaughan", Price: 39.99},
-}
-
 func Database(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Set("db", db)
@@ -34,13 +27,32 @@ func Database(db *sql.DB) gin.HandlerFunc {
 	}
 }
 
+type Handler struct {
+	db *sql.DB
+}
+
 // getAlbums responds with the list of all albums as JSON.
-func getAlbums(c *gin.Context) {
+func (h Handler) getAlbums(c *gin.Context) {
+	rows, err := h.db.Query("SELECT * FROM album")
+	CheckError(err)
+
+	defer rows.Close()
+
+	var albums = []album{}
+	for rows.Next() {
+		var alb album
+		if err := rows.Scan(&alb.ID, &alb.Title, &alb.Artist, &alb.Price); err != nil {
+			panic(err)
+		}
+
+		albums = append(albums, alb)
+	}
+
 	c.IndentedJSON(http.StatusOK, albums)
 }
 
 // postAlbums adds an album from JSON received in the request body.
-func postAlbums(c *gin.Context) {
+func (h Handler) postAlbums(c *gin.Context) {
 	var newAlbum album
 
 	// Call BindJSON to bind the received JSON to
@@ -53,8 +65,7 @@ func postAlbums(c *gin.Context) {
 	// albums = append(albums, newAlbum)
 
 	lastInsertId := int64(0)
-	db := c.MustGet("db").(*sql.DB)
-	err := db.QueryRow("INSERT into album (title, artist, price) VALUES ($1, $2, $3) RETURNING id",
+	err := h.db.QueryRow("INSERT into album (title, artist, price) VALUES ($1, $2, $3) RETURNING id",
 		newAlbum.Title, newAlbum.Artist, newAlbum.Price).Scan(&lastInsertId)
 
 	if err != nil {
@@ -67,42 +78,15 @@ func postAlbums(c *gin.Context) {
 	c.IndentedJSON(http.StatusCreated, newAlbum)
 }
 
-// getAlbumByID locates the album whose ID value matches the id
-// parameter sent by the client, then returns that album as a response.
-func getAlbumByID_(c *gin.Context) {
-	param := c.Param("id")
-
-	// Loop over the list of albums, looking for
-	// an album whose ID value matches the parameter.
-	id, err := strconv.ParseInt(param, 10, 64)
-
-	if err != nil {
-		panic(err)
-	}
-
-	for _, a := range albums {
-		if a.ID == id {
-			c.IndentedJSON(http.StatusOK, a)
-			return
-		}
-	}
-	c.IndentedJSON(http.StatusNotFound, gin.H{"message": "album not found"})
-}
-
-func getAlbumByID(c *gin.Context) {
+func (h Handler) getAlbumByID(c *gin.Context) {
 	param := c.Param("id")
 
 	id, err := strconv.ParseInt(param, 10, 64)
 
-	if err != nil {
-		panic(err)
-	}
+	CheckError(err)
 
-	db := c.MustGet("db").(*sql.DB)
-	rows, err := db.Query("SELECT * FROM album WHERE id = $1", id)
-	if err != nil {
-		panic(err)
-	}
+	rows, err := h.db.Query("SELECT * FROM album WHERE id = $1", id)
+	CheckError(err)
 
 	defer rows.Close()
 
@@ -140,9 +124,9 @@ func main() {
 	println("psqlconn = ", psqlconn)
 	db, err := sql.Open("postgres", psqlconn)
 
-	if err != nil {
-		panic(err)
-	}
+	h := Handler{db}
+
+	CheckError(err)
 
 	r := gin.Default()
 	r.GET("/ping", func(c *gin.Context) {
@@ -150,10 +134,11 @@ func main() {
 			"message": "pong",
 		})
 	})
-	r.Use(Database(db))
-	r.GET("/albums", getAlbums)
-	r.GET("/albums/:id", getAlbumByID)
-	r.POST("/albums", postAlbums)
+
+	// r.Use(Database(db))
+	r.GET("/albums", h.getAlbums)
+	r.GET("/albums/:id", h.getAlbumByID)
+	r.POST("/albums", h.postAlbums)
 
 	r.Run() // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
 }
