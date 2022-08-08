@@ -5,10 +5,6 @@ import (
 	"log"
 )
 
-func Greet() string {
-	return "hello"
-}
-
 func getAlbums(db *sql.DB) []album {
 	rows, err := db.Query("SELECT * FROM album")
 	CheckError(err)

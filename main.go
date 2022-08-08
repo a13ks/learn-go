@@ -116,8 +116,6 @@ func CheckError(err error) {
 }
 
 func main() {
-	fmt.Println("Go rules?", Greet())
-
 	var psqlconn = os.Getenv("DATABASE_URL")
 	if psqlconn == "" {
 		psqlconn = "postgres://user:password@localhost:5432/go_tips?sslmode=disable"
