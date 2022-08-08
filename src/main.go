@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -11,14 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	_ "github.com/lib/pq"
 )
-
-// album represents data about a record album.
-type album struct {
-	ID     int64   `json:"id"`
-	Title  string  `json:"title"`
-	Artist string  `json:"artist"`
-	Price  float64 `json:"price"`
-}
 
 func Database(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -33,20 +24,7 @@ type Handler struct {
 
 // getAlbums responds with the list of all albums as JSON.
 func (h Handler) getAlbums(c *gin.Context) {
-	rows, err := h.db.Query("SELECT * FROM album")
-	CheckError(err)
-
-	defer rows.Close()
-
-	var albums = []album{}
-	for rows.Next() {
-		var alb album
-		if err := rows.Scan(&alb.ID, &alb.Title, &alb.Artist, &alb.Price); err != nil {
-			panic(err)
-		}
-
-		albums = append(albums, alb)
-	}
+	var albums = getAlbums(h.db)
 
 	c.IndentedJSON(http.StatusOK, albums)
 }
@@ -61,18 +39,7 @@ func (h Handler) postAlbums(c *gin.Context) {
 		return
 	}
 
-	// Add the new album to the slice.
-	// albums = append(albums, newAlbum)
-
-	lastInsertId := int64(0)
-	err := h.db.QueryRow("INSERT into album (title, artist, price) VALUES ($1, $2, $3) RETURNING id",
-		newAlbum.Title, newAlbum.Artist, newAlbum.Price).Scan(&lastInsertId)
-
-	if err != nil {
-		log.Fatalf("An error occurred while executing query: %v", err)
-	}
-
-	newAlbum.ID = lastInsertId
+	lastInsertId := createAlbum(h.db, &newAlbum)
 
 	c.Header("Location", fmt.Sprintf("/albums/%d", lastInsertId))
 	c.IndentedJSON(http.StatusCreated, newAlbum)
@@ -82,31 +49,14 @@ func (h Handler) getAlbumByID(c *gin.Context) {
 	param := c.Param("id")
 
 	id, err := strconv.ParseInt(param, 10, 64)
-
 	CheckError(err)
 
-	rows, err := h.db.Query("SELECT * FROM album WHERE id = $1", id)
-	CheckError(err)
-
-	defer rows.Close()
-
-	if rows == nil {
-		c.IndentedJSON(http.StatusNotFound, gin.H{"message": "album not found"})
-		return
-	}
-
-	for rows.Next() {
-		var alb album
-		if err := rows.Scan(&alb.ID, &alb.Title, &alb.Artist, &alb.Price); err != nil {
-			panic(err)
-		}
-
+	if alb := getAlbumByID(h.db, id); alb.ID > 0 {
 		c.IndentedJSON(http.StatusOK, alb)
 		return
 	}
 
 	c.IndentedJSON(http.StatusNotFound, gin.H{"message": "album not found"})
-	return
 }
 
 func CheckError(err error) {
